@@ -1,0 +1,573 @@
+---
+title: "scDHA Demonstration"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+
+# Install scDHA from CRAN:
+# install.packages("scDHA")
+
+#When the package is loaded, it will check for C++ libtorch 
+library(scDHA)
+#libtorch can be installed using:
+torch::install_torch()
+
+# 2. Install other necessary packages ----
+
+if (!requireNamespace("mclust", quietly = TRUE))         
+    install.packages("mclust")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("SingleCellExperiment")
+
+# Shiny
+library(flexdashboard)
+library(shiny)
+library(shinyWidgets)
+library(shinyjs)
+
+# install.packages("DT")
+library(DT)
+
+# Core
+library(tidyverse)
+library(tidyquant)
+
+library(readxl)
+library(writexl)
+
+# Interactive Visualizations
+library(plotly)
+
+# Functions that perform the scDHA framework
+source("run_scDHA.R")
+```
+
+```{r}
+
+# By default
+# sc <- load_data(dsname = "Goolam")
+
+```
+
+
+
+Sidebar {.sidebar data-width=350}
+------------------------
+
+```{r}
+useShinyjs(rmd = TRUE)
+
+
+# Select data source type
+shinyWidgets::radioGroupButtons(
+    inputId  = "datasource",
+    label    = h4("Datasource"),
+    choices  = c("Built-in Dataset" = "B", "Upload file" = "U"),
+    selected = "B",
+    status   = "primary", 
+    justified = TRUE,
+    checkIcon = list(
+        yes = icon("ok", lib = "glyphicon"),
+        no  = NULL
+        )
+)
+
+
+
+# Get Build-in Datasets
+data_package <- data(package = "scDHA")
+builtin_datasets <- as.data.frame(data_package[[3]])$Item
+
+
+# Built-in Dataset Widget
+shinyWidgets::pickerInput(
+    inputId  = "builtin_datasets", 
+    width = "100%",
+    label    = h4("Select a Dataset"), 
+    choices  = unique(builtin_datasets), 
+    multiple = FALSE
+)
+
+
+# Increase the file size limit
+options(shiny.maxRequestSize = 1024^10)
+
+# Upload dataset file
+fileInput(  inputId = "upload_dataset", 
+            width = "100%",
+            label   = h4("Select your file (.rds, .rda, .csv, .tsv)"),
+            multiple = FALSE,
+            accept = c( 'text/csv', 
+                        'text/comma-separated-values',
+                        'text/tab-separated-values',
+                        'text/plain',
+                        '.csv',
+                        '.tsv',
+                        '.rds',
+                        '.rda'),
+                         buttonLabel = "Browse...",
+                         placeholder = "No file selected"
+)
+
+br()
+
+h4("Data & Pre-processing")
+
+# Load Data Button 
+actionButton(inputId = "load", label = "Load Data", icon = icon("database"), width = "49%") 
+
+# "Autocencode" Button 
+actionButton(inputId = "autoencode", label = "Autoencode", icon = icon("cog"), width = "49%")
+
+
+br()
+hr()
+br()
+```
+
+
+```{r}
+# Capture the changes in file upload
+
+values <- reactiveValues(df_data = NULL, file_path = NULL)
+
+
+observeEvent(input$upload_dataset, {
+    req(input$upload_dataset)
+    # values$df_data <- read.csv(input$upload_dataset$datapath)
+    
+    # Get uploaded file path
+    values$file_path <<- input$upload_dataset$datapath
+})
+
+
+```
+
+
+
+```{r}
+
+h4("Applications")
+
+# "Cell segregation" Button 
+actionButton(inputId = "cluster", label = "1. Segregation", icon = icon("table"), width = "49%")
+
+
+# "Visualize" Button
+actionButton(inputId = "visualize", label = "2. Visualize", icon = icon("line-chart"), width = "49%")
+
+br()
+br()
+```
+
+```{r}
+# "Classification" Button 
+actionButton(inputId = "classification", label = "3. Classification", icon = icon("list-alt"), width = "49%")
+
+
+# "Time Trajectory" Button
+actionButton(inputId = "pseudotime", label = "4. Time Trajectory", icon = icon("bolt"), width = "49%")
+
+br()
+br()
+br()
+
+```
+
+```{r}
+
+h4("Save your works")
+
+
+
+# Save Button
+actionButton(inputId = "save", label = "Save Result", icon = icon("save"), width = "49%")
+
+# Reset Button
+actionButton(inputId = "reset", label = "Reset", icon = icon("sync"), width = "49%")
+```
+
+
+
+```{r}
+
+# Reset Button
+observeEvent(eventExp = input$reset, handlerExpr = {
+    
+    # Reset option back to default, select built-in dataset
+    updateRadioGroupButtons(session = session,
+                             inputId = "datasource",
+                             selected = "B")
+
+    updatePickerInput(session = session, 
+                      inputId = "builtin_datasets",
+                      selected = "Goolam")
+    
+    # Load Goolam data by default
+    shinyjs::delay(ms = 300, expr = {
+        shinyjs::click(id = "load")
+    })
+    
+})
+```
+
+
+Row {data-height=750}
+-----------------------
+
+### Single-Cell Data
+
+```{r}
+# "Load data" button click event
+load_sc_data <- eventReactive(
+    eventExpr = input$load, 
+    valueExpr = {
+        
+        if (input$datasource == "B") {
+            
+            sc <<- load_data(dsname = input$builtin_datasets)
+
+        } else {
+    
+            # load_data(file = "data/yan.rds") values$file_path 
+            sc <<- load_data(file = values$file_path)
+        }
+    },
+    ignoreNULL = TRUE
+)
+
+```
+
+
+```{r}
+
+sc_data_tbl <- reactive({
+    
+    # Save sc as global variable to use in next reactive sessions.
+    load_sc_data()
+    
+    # Transpose the data back to as original format to show in the Data table.
+    
+    if (!is.null(sc)) {
+        sc$data %>% t()
+    }
+})
+```
+
+
+```{r}
+
+# Render table output for SC Data
+
+output$dt_sc_data <- DT::renderDataTable({
+   sc_data_tbl() 
+   
+}, options = list(pageLength = 100))
+
+DTOutput(outputId = "dt_sc_data")
+```
+
+Row {data-height=750}
+-----------------------
+
+### Single-Cell Data after Autoencoder - Latent (m = 15)
+
+```{r}
+# "Autoencode" button click event
+autoencode_sc_data <- eventReactive(
+    eventExpr = input$autoencode, 
+    valueExpr = {
+        
+        # SC data after go through scDHA pipeline
+        sc %>% scDHA_pipeline()    
+
+    },
+    ignoreNULL = TRUE
+)
+
+```
+
+
+```{r}
+
+scDHA_result_tbl <- reactive({
+    
+    # Save as global variable to use in next reactive sessions.
+    scDHA_result <<- autoencode_sc_data()
+    
+    # Latent 
+    
+    if (!is.null(scDHA_result)) {
+        scDHA_result$latent
+    }
+})
+
+```
+
+
+```{r}
+
+# Render table output for scDHA result
+
+output$dt_scDHA_result <- DT::renderDataTable({
+   scDHA_result_tbl() 
+   
+}, options = list(pageLength = 100))
+
+DTOutput(outputId = "dt_scDHA_result")
+```
+
+
+Row {data-height=750}
+-----------------------
+
+### 1. Cell Segregation
+
+```{r}
+
+# "Cell Segregation" button click event
+do_cluster <- eventReactive(
+    eventExpr = input$cluster, 
+    valueExpr = {
+        
+        # load sc data
+        # sc <- load_sc_data()
+        
+        # scDHA function generates clustering result, the input matrix has rows as          samples and columns as genes, then merge the clustering result with the cell ID.
+        cluster <<- cell_segregation(sc, scDHA_result)
+        
+    },
+    ignoreNULL = TRUE
+)
+
+```
+
+
+```{r}
+
+cluster_tbl <- reactive({
+    
+    # Perform clustering
+    do_cluster()
+})
+
+```
+
+```{r}
+
+output$dt_cluster <- DT::renderDataTable({
+    cluster_tbl() 
+    
+}, options = list(pageLength = 100))
+
+DTOutput(outputId = "dt_cluster")
+```
+
+
+
+### 2. Visualization
+
+```{r}
+
+# "Cell Segregation" button click event
+do_visualize <- eventReactive(
+    eventExpr = input$visualize, 
+    valueExpr = {
+        
+        # load sc data
+        # sc <- load_sc_data()
+        
+        # Generate 2D representation, the input is the output from scDHA function
+        rep2d <<- scDHA_result %>% gen_2d_rep() 
+        rep2d %>% visual_2d()
+        
+    },
+    ignoreNULL = TRUE
+)
+
+```
+
+
+```{r}
+
+
+cluster_plot <- reactive({
+
+    # Visualize 2D representations.
+    do_visualize()
+    
+})
+    
+
+output$visual2d <- renderPlot({
+
+    g1 <<- cluster_plot() 
+
+    })
+
+plotOutput(outputId = "visual2d")
+```
+
+
+### 3. Cell Classification
+
+```{r}
+
+# "Cell Classification" button click event
+do_classification <- eventReactive(
+    eventExpr = input$classification, 
+    valueExpr = {
+        
+        # load sc data
+        # sc <- load_sc_data()
+        
+        #Split data into training and testing sets
+        set.seed(1)
+        
+        idx <- sample.int(nrow(sc$data), size = round(nrow(sc$data)*0.75))
+        
+        train.x <<- sc$data[idx, ]
+        train.y <<- sc$label[idx]
+        test.x  <<- sc$data[-idx, ]
+        test.y  <<- sc$label[-idx]
+        test.cell.ids <<- sc$cell.ids[-idx] 
+        
+        # Predict the labels of cells in testing set, the input matrices have rows as samples and columns as genes
+
+        prediction <<- cell_classification (train.x, train.y, test.x) 
+        
+        # Calculate accuracy
+        accuracy <<- cal_accuracy (test.y, prediction)
+        
+    },
+    ignoreNULL = TRUE
+)
+
+```
+
+
+```{r}
+
+classification_tbl <- reactive({
+    
+    # Perform classification
+    do_classification()
+    
+    # Generate result table
+    predict_tbl <<- bind_cols(test.cell.ids, prediction, test.y) %>% 
+        set_names(c("Cell ID", "Predicted Label", "True Label")) %>%
+        mutate(`Accurate` = case_when (
+                    `Predicted Label` == `True Label` ~ 'TRUE',
+                    TRUE ~ 'FALSE'
+                ))
+})
+
+```
+
+```{r}
+
+output$dt_classification <- DT::renderDataTable({
+    classification_tbl() 
+    
+}, options = list(pageLength = 100))
+
+DTOutput(outputId = "dt_classification")
+```
+
+
+
+### 4. Pseudo Time-trajectory inference
+
+```{r}
+
+# "Cell Segregation" button click event
+do_inference <- eventReactive(
+    eventExpr = input$pseudotime, 
+    valueExpr = {
+        
+        # load sc data
+        # sc <- load_sc_data()
+        
+        # Generate 2D representation, the input is the output from scDHA function
+        inference_result <<- scDHA_result %>% pseudo_time()
+        
+        # Calculate r2
+        r2 <<- cal_r2(sc, inference_result)
+       
+        # Plot the result
+        pseudo_plot(sc, inference_result)
+    },
+    ignoreNULL = TRUE
+)
+
+```
+
+
+```{r}
+
+
+time_trajectory_plot <- reactive({
+
+    # Visualize 2D representations.
+    do_inference()
+    
+})
+    
+
+output$time_trajectory <- renderPlot({
+
+    g2 <<- time_trajectory_plot() 
+    renderPrint(r2)
+    
+})
+
+plotOutput(outputId = "time_trajectory")
+```
+
+```{r}
+
+# "Save Result" button
+
+observeEvent(eventExp = input$save, handlerExpr = {
+    
+    # Save
+    result <<- list()
+    
+    if (!is.null(sc))
+          result <<- append(result, sc)
+      
+    if (!is.null(scDHA_result))
+        result <<- append(result, scDHA_result)
+     
+    if (!is.null(cluster))
+        result <<- append(result, cluster)
+     
+    if (!is.null(rep2d))
+        result <<- append(result, rep2d)
+    # 
+    # if (!is.null(predict_tbl))
+    #     result <<- append(result, predict_tbl)
+    # 
+    # if (!is.null(accuracy))
+    #     result <<- append(result, accuracy)
+    # 
+    # if (!is.null(inference_result))
+    #     result <<- append(result, inference_result)
+    # 
+    # if (!is.null(r2))
+    #     result <<- append(result, r2)
+    
+    readr::write_rds(result, file = "../results/myresult.rds")
+})
+
+
+
+```
