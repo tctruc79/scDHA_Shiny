@@ -1,31 +1,18 @@
 ---
 title: "scDHA Demonstration"
-output: 
+output:
   flexdashboard::flex_dashboard:
     orientation: rows
-    vertical_layout: fill
+    horizontal_layout: fill
 runtime: shiny
+resource_files:
+- install_packages.R
 ---
 
 ```{r setup, include=FALSE}
-
-# Install scDHA from CRAN:
-# install.packages("scDHA")
-
 #When the package is loaded, it will check for C++ libtorch 
 library(scDHA)
-#libtorch can be installed using:
-torch::install_torch()
 
-# 2. Install other necessary packages ----
-
-if (!requireNamespace("mclust", quietly = TRUE))         
-    install.packages("mclust")
-
-if (!require("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
-
-BiocManager::install("SingleCellExperiment")
 
 # Shiny
 library(flexdashboard)
@@ -38,17 +25,25 @@ library(DT)
 
 # Core
 library(tidyverse)
-library(tidyquant)
-
-library(readxl)
-library(writexl)
+# library(tidyquant)
 
 # Interactive Visualizations
-library(plotly)
+# library(plotly)
 
 # Functions that perform the scDHA framework
 source("run_scDHA.R")
+
 ```
+
+
+
+```{r}
+# Install rsconnect to deploy the ShinyApp to shinyapps.io for production ready
+# install.packages('rsconnect')
+```
+
+
+
 
 ```{r}
 
@@ -226,6 +221,41 @@ Row {data-height=750}
 ### Single-Cell Data
 
 ```{r}
+
+# Initially, sc is NULL
+
+analysis_values <<- reactiveValues(
+    
+    # Single Cell data
+    sc = NULL,
+    
+    # Autoencoder
+    scDHA_result = NULL,
+    
+    # Cell segregation
+    rep2d = NULL,
+    plot2d = NULL,
+    
+    # Cell classification
+    idx = NULL,
+        
+    train.x = NULL,
+    train.y = NULL,
+    test.x  = NULL,
+    test.y  = NULL,
+    test.cell.ids = NULL,
+        
+    prediction = NULL,
+        
+    accuracy = NULL,
+    predict_tbl = NULL,
+    
+    # Psuedo time inference
+    inference_result = NULL,
+    r2 = NULL
+)
+
+
 # "Load data" button click event
 load_sc_data <- eventReactive(
     eventExpr = input$load, 
@@ -233,13 +263,17 @@ load_sc_data <- eventReactive(
         
         if (input$datasource == "B") {
             
-            sc <<- load_data(dsname = input$builtin_datasets)
+            # sc <<- load_data(dsname = input$builtin_datasets)
+            load_data(dsname = input$builtin_datasets)
 
         } else {
     
             # load_data(file = "data/yan.rds") values$file_path 
-            sc <<- load_data(file = values$file_path)
+            # sc <<- load_data(file = values$file_path)
+            load_data(file = values$file_path)
         }
+        
+  
     },
     ignoreNULL = TRUE
 )
@@ -252,12 +286,16 @@ load_sc_data <- eventReactive(
 sc_data_tbl <- reactive({
     
     # Save sc as global variable to use in next reactive sessions.
-    load_sc_data()
+    #sc <<- load_sc_data()
+    analysis_values$sc <<- load_sc_data()
     
     # Transpose the data back to as original format to show in the Data table.
     
-    if (!is.null(sc)) {
-        sc$data %>% t()
+    # if (!is.null(sc)) {
+    #    sc$data %>% t()
+    
+    if (!is.null(analysis_values$sc)) {
+        analysis_values$sc$data %>% t()
     }
 })
 ```
@@ -270,7 +308,7 @@ sc_data_tbl <- reactive({
 output$dt_sc_data <- DT::renderDataTable({
    sc_data_tbl() 
    
-}, options = list(pageLength = 100))
+}, options = list(pageLength = 5))
 
 DTOutput(outputId = "dt_sc_data")
 ```
@@ -281,13 +319,15 @@ Row {data-height=750}
 ### Single-Cell Data after Autoencoder - Latent (m = 15)
 
 ```{r}
+
 # "Autoencode" button click event
 autoencode_sc_data <- eventReactive(
     eventExpr = input$autoencode, 
     valueExpr = {
         
         # SC data after go through scDHA pipeline
-        sc %>% scDHA_pipeline()    
+        if (!is.null(analysis_values$sc))
+            scDHA_pipeline(analysis_values$sc)    
 
     },
     ignoreNULL = TRUE
@@ -301,12 +341,14 @@ autoencode_sc_data <- eventReactive(
 scDHA_result_tbl <- reactive({
     
     # Save as global variable to use in next reactive sessions.
-    scDHA_result <<- autoencode_sc_data()
+    # scDHA_result <<- autoencode_sc_data()
+    analysis_values$scDHA_result <<- autoencode_sc_data()
     
     # Latent 
     
-    if (!is.null(scDHA_result)) {
-        scDHA_result$latent
+    if (!is.null(analysis_values$scDHA_result)) {
+       # scDHA_result$latent
+        analysis_values$scDHA_result$latent
     }
 })
 
@@ -320,7 +362,7 @@ scDHA_result_tbl <- reactive({
 output$dt_scDHA_result <- DT::renderDataTable({
    scDHA_result_tbl() 
    
-}, options = list(pageLength = 100))
+}, options = list(pageLength = 5))
 
 DTOutput(outputId = "dt_scDHA_result")
 ```
@@ -342,7 +384,8 @@ do_cluster <- eventReactive(
         # sc <- load_sc_data()
         
         # scDHA function generates clustering result, the input matrix has rows as          samples and columns as genes, then merge the clustering result with the cell ID.
-        cluster <<- cell_segregation(sc, scDHA_result)
+        if (!is.null(analysis_values$sc) && !is.null(analysis_values$scDHA_result))
+            cell_segregation(analysis_values$sc, analysis_values$scDHA_result)
         
     },
     ignoreNULL = TRUE
@@ -356,7 +399,7 @@ do_cluster <- eventReactive(
 cluster_tbl <- reactive({
     
     # Perform clustering
-    do_cluster()
+    analysis_values$cluster <<- do_cluster()
 })
 
 ```
@@ -366,7 +409,7 @@ cluster_tbl <- reactive({
 output$dt_cluster <- DT::renderDataTable({
     cluster_tbl() 
     
-}, options = list(pageLength = 100))
+}, options = list(pageLength = 5))
 
 DTOutput(outputId = "dt_cluster")
 ```
@@ -382,12 +425,12 @@ do_visualize <- eventReactive(
     eventExpr = input$visualize, 
     valueExpr = {
         
-        # load sc data
-        # sc <- load_sc_data()
-        
         # Generate 2D representation, the input is the output from scDHA function
-        rep2d <<- scDHA_result %>% gen_2d_rep() 
-        rep2d %>% visual_2d()
+        if (!is.null(analysis_values$scDHA_result))
+            analysis_values$rep2d <<- gen_2d_rep(analysis_values$scDHA_result)
+        
+        if (!is.null(analysis_values$rep2d))
+            analysis_values$plot2d <<- visual_2d(analysis_values$rep2d, analysis_values$sc)
         
     },
     ignoreNULL = TRUE
@@ -409,7 +452,7 @@ cluster_plot <- reactive({
 
 output$visual2d <- renderPlot({
 
-    g1 <<- cluster_plot() 
+    cluster_plot() 
 
     })
 
@@ -432,20 +475,25 @@ do_classification <- eventReactive(
         #Split data into training and testing sets
         set.seed(1)
         
-        idx <- sample.int(nrow(sc$data), size = round(nrow(sc$data)*0.75))
+        analysis_values$idx <<- sample.int(nrow(analysis_values$sc$data), 
+                                           size = round(nrow(analysis_values$sc$data)*0.75))
         
-        train.x <<- sc$data[idx, ]
-        train.y <<- sc$label[idx]
-        test.x  <<- sc$data[-idx, ]
-        test.y  <<- sc$label[-idx]
-        test.cell.ids <<- sc$cell.ids[-idx] 
+        analysis_values$train.x <<- analysis_values$sc$data[analysis_values$idx, ]
+        analysis_values$train.y <<- analysis_values$sc$label[analysis_values$idx]
+        analysis_values$test.x  <<- analysis_values$sc$data[-analysis_values$idx, ]
+        analysis_values$test.y  <<- analysis_values$sc$label[-analysis_values$idx]
+        analysis_values$test.cell.ids <<- analysis_values$sc$cell.ids[-analysis_values$idx] 
         
         # Predict the labels of cells in testing set, the input matrices have rows as samples and columns as genes
 
-        prediction <<- cell_classification (train.x, train.y, test.x) 
+        analysis_values$prediction <<- cell_classification (
+                                                    analysis_values$train.x, 
+                                                    analysis_values$train.y, 
+                                                    analysis_values$test.x) 
         
         # Calculate accuracy
-        accuracy <<- cal_accuracy (test.y, prediction)
+        analysis_values$accuracy <<- cal_accuracy (analysis_values$test.y, 
+                                                   analysis_values$prediction)
         
     },
     ignoreNULL = TRUE
@@ -462,11 +510,15 @@ classification_tbl <- reactive({
     do_classification()
     
     # Generate result table
-    predict_tbl <<- bind_cols(test.cell.ids, prediction, test.y) %>% 
+    analysis_values$predict_tbl <<- bind_cols(analysis_values$test.cell.ids, 
+                                              analysis_values$prediction, 
+                                              analysis_values$test.y) %>% 
+        
         set_names(c("Cell ID", "Predicted Label", "True Label")) %>%
+        
         mutate(`Accurate` = case_when (
-                    `Predicted Label` == `True Label` ~ 'TRUE',
-                    TRUE ~ 'FALSE'
+                        `Predicted Label` == `True Label` ~ 'TRUE',
+                        TRUE ~ 'FALSE'
                 ))
 })
 
@@ -475,11 +527,15 @@ classification_tbl <- reactive({
 ```{r}
 
 output$dt_classification <- DT::renderDataTable({
-    classification_tbl() 
     
-}, options = list(pageLength = 100))
+    classification_tbl() 
+  
+    
+}, options = list(pageLength = 5))
 
 DTOutput(outputId = "dt_classification")
+
+
 ```
 
 
@@ -497,13 +553,19 @@ do_inference <- eventReactive(
         # sc <- load_sc_data()
         
         # Generate 2D representation, the input is the output from scDHA function
-        inference_result <<- scDHA_result %>% pseudo_time()
+        if (!is.null(analysis_values$scDHA_result))
+            analysis_values$inference_result <<- pseudo_time(analysis_values$scDHA_result)
         
         # Calculate r2
-        r2 <<- cal_r2(sc, inference_result)
+        if (!is.null(analysis_values$inference_result) && !is.null(analysis_values$sc))
+            analysis_values$r2 <<- cal_r2(analysis_values$sc, 
+                                          analysis_values$inference_result)
        
         # Plot the result
-        pseudo_plot(sc, inference_result)
+        if (!is.null(analysis_values$inference_result) && !is.null(analysis_values$sc))
+            pseudo_plot(analysis_values$sc, 
+                        analysis_values$inference_result,
+                        analysis_values$r2)
     },
     ignoreNULL = TRUE
 )
@@ -525,7 +587,7 @@ time_trajectory_plot <- reactive({
 output$time_trajectory <- renderPlot({
 
     g2 <<- time_trajectory_plot() 
-    renderPrint(r2)
+    renderPrint(analysis_values$r2)
     
 })
 
@@ -541,30 +603,58 @@ observeEvent(eventExp = input$save, handlerExpr = {
     # Save
     result <<- list()
     
-    if (!is.null(sc))
-          result <<- append(result, sc)
+    if (!is.null(analysis_values$sc))
+          result <<- append(result, analysis_values$sc)
       
-    if (!is.null(scDHA_result))
-        result <<- append(result, scDHA_result)
+    if (!is.null(analysis_values$scDHA_result))
+        result <<- append(result, analysis_values$scDHA_result)
      
-    if (!is.null(cluster))
-        result <<- append(result, cluster)
+    if (!is.null(analysis_values$cluster))
+        result <<- append(result, analysis_values$cluster)
      
-    if (!is.null(rep2d))
-        result <<- append(result, rep2d)
-    # 
-    # if (!is.null(predict_tbl))
-    #     result <<- append(result, predict_tbl)
-    # 
-    # if (!is.null(accuracy))
-    #     result <<- append(result, accuracy)
-    # 
-    # if (!is.null(inference_result))
-    #     result <<- append(result, inference_result)
-    # 
-    # if (!is.null(r2))
-    #     result <<- append(result, r2)
+    if (!is.null(analysis_values$rep2d))
+        result <<- append(result, analysis_values$rep2d)
     
+    if (!is.null(analysis_values$plot2d))
+        result <<- append(result, analysis_values$plot2d)
+    
+    if (!is.null(analysis_values$idx))
+        result <<- append(result, analysis_values$idx)
+    
+    if (!is.null(analysis_values$train.x))
+        result <<- append(result, analysis_values$train.x)
+    
+    if (!is.null(analysis_values$train.y))
+        result <<- append(result, analysis_values$train.y)
+    
+    if (!is.null(analysis_values$test.x))
+        result <<- append(result, analysis_values$test.x)
+    
+    if (!is.null(analysis_values$test.y))
+        result <<- append(result, analysis_values$test.y)
+     
+    if (!is.null(analysis_values$test.cell.ids))
+        result <<- append(result, analysis_values$test.cell.ids)
+    
+    if (!is.null(analysis_values$prediction))
+        result <<- append(result, analysis_values$prediction)
+    
+    if (!is.null(analysis_values$accuracy))
+        result <<- append(result, analysis_values$accuracy)
+    
+        
+    if (!is.null(analysis_values$predict_tbl))
+        result <<- append(result, analysis_values$predict_tbl)
+    
+        
+    if (!is.null(analysis_values$inference_result))
+        result <<- append(result, analysis_values$inference_result)
+    
+        if (!is.null(analysis_values$r2))
+        result <<- append(result, analysis_values$r2)
+    # Cell classification
+
+
     readr::write_rds(result, file = "../results/myresult.rds")
 })
 

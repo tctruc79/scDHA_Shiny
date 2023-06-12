@@ -1,0 +1,14 @@
+name: scDHA_Shiny
+title: scDHA_Shiny
+username:
+account: honeyg
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 9291337
+bundleId: 7336088
+url: https://honeyg.shinyapps.io/scDHA_Shiny/
+when: 1686600669.16435
+lastSyncTime: 1686600669.16437
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: ../results/myresult.rds

@@ -3,8 +3,8 @@
 # scDHA library
 library(scDHA)
 
+# Cores
 library(tidyverse)
-library(tidyquant)
 library(tools)
 library(readr)
 
@@ -13,6 +13,9 @@ library(readr)
 # Load data from file
 load_data <- function(dsname = NULL, file = NULL) {
 
+    # increasing timeout
+    options(timeout = 600)
+    
     # Load data from file or package
     if (!is.null(dsname)) {
         
@@ -36,7 +39,7 @@ load_data <- function(dsname = NULL, file = NULL) {
             
             # load .rds file
             
-            data_from_source <- readr::read_rds(file)    
+            data_from_source <- readr::read_rds(file = file)    
         
             # Get data matrix and label
         
@@ -65,7 +68,7 @@ load_data <- function(dsname = NULL, file = NULL) {
             
             # load .csv file
             # file = "data/csv/camp-brain-fix_imputed.csv"
-            data_from_source <- readr::read_csv(file = file, num_threads = 16)
+            data_from_source <- readr::read_csv(file = file)
         
             # Get data matrix 
             
@@ -85,7 +88,7 @@ load_data <- function(dsname = NULL, file = NULL) {
             
             # load .tsv file
             
-            data_from_source <- readr::read_tsv(file = file, num_threads = 16)
+            data_from_source <- readr::read_tsv(file = file)
             
             # Get data matrix 
             
@@ -121,8 +124,12 @@ load_data <- function(dsname = NULL, file = NULL) {
 # SC data after go through scDHA pipeline
 scDHA_pipeline <- function(sc) {
  
+    # increasing timeout
+    options(timeout = 600)
+    
     # SC data after go through scDHA pipeline
-    result <- scDHA(sc$data, ncores = 16, seed = 1)
+    result <- scDHA(sc$data, ncores = 32, seed = 1)
+    # result <- scDHA(sc$data, seed = 1)
     
     return(result)
 }
@@ -157,7 +164,10 @@ cell_segregation <- function(sc, scDHA_result) {
 # Generate 2D representation, the input is the output from scDHA function
 gen_2d_rep <- function(scDHA_result) {
  
-     result <- scDHA.vis(scDHA_result, ncores = 16, seed = 1)
+    # increasing timeout
+    options(timeout = 600)
+    
+    result <- scDHA.vis(scDHA_result, ncores = 16, seed = 1)
      
      return(result)
 }
@@ -167,7 +177,10 @@ gen_2d_rep <- function(scDHA_result) {
 
 # Plot the representation of the dataset, different colors represent different cell types
 
-visual_2d <- function(result) {
+visual_2d <- function(result, sc) {
+    
+    # increasing timeout
+    options(timeout = 600)
     
     plot(result$pred, col=factor(sc$label), xlab = "scDHA1", ylab = "scDHA2")
 }
@@ -177,6 +190,11 @@ visual_2d <- function(result) {
 # Generate pseudo-time for each cell, the input is the output from scDHA function
 
 pseudo_time <- function(scDHA_result) {
+    
+    # increasing timeout
+    options(timeout = 600)
+    
+    #  Perform Pseudo-time inference
     result <- scDHA.pt(scDHA_result, start.point = 1, seed = 1)
     
     return(result)
@@ -194,7 +212,7 @@ cal_r2 <- function (sc, result) {
 
 # Plot pseudo-temporal ordering of cells in dataset
 
-pseudo_plot <- function(sc, result) {
+pseudo_plot <- function(sc, result, r2) {
  
     plot(result$pt, factor(sc$label, levels = sc$cell.stages), xlab= "Pseudo Time", ylab = "Cell Stages", xaxt="n", yaxt="n")
     axis(2, at=1:5,labels=sc$cell.stages, las=2)
