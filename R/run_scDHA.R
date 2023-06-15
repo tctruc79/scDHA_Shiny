@@ -169,7 +169,7 @@ gen_2d_rep <- function(scDHA_result) {
     
     result <- scDHA.vis(scDHA_result, ncores = 16, seed = 1)
      
-     return(result)
+    return(result)
 }
 
 # rep2d <- gen_2d_rep(scDHA_result)
@@ -183,6 +183,7 @@ visual_2d <- function(result, sc) {
     options(timeout = 600)
     
     plot(result$pred, col=factor(sc$label), xlab = "scDHA1", ylab = "scDHA2")
+    
 }
 
 # visual_2d(rep2d)
@@ -215,8 +216,8 @@ cal_r2 <- function (sc, result) {
 pseudo_plot <- function(sc, result, r2) {
  
     plot(result$pt, factor(sc$label, levels = sc$cell.stages), xlab= "Pseudo Time", ylab = "Cell Stages", xaxt="n", yaxt="n")
-    axis(2, at=1:5,labels=sc$cell.stages, las=2)
-    text(x = 1, y = 4.5, labels = paste0("R2 = ", r2))
+    axis(2, at = 1:length(sc$cell.stages), labels=sc$cell.stages, las = 2)
+    text(x = 5, y = 5, labels = paste0("R2 = ", r2))
 }
 
 

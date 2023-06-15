@@ -1,21 +1,36 @@
 # 1. Install "scDHA" from CRAN:
 
-install.packages("scDHA")
-install.packages("MASS")
+pkgs <- c(
+    "scDHA",
+    "MASS",
+    
+    "torch",
+    "mclust",
+    
+    "BiocManager",
+    
+    "flexdashboard",
+    "shiny",
+    "shinyWidgets",
+    "shinyjs",
+    
+    # install.packages("DT")
+    "DT",
+    
+    # Core
+    "tidyverse",
+    
+    # torch
+    "torch"
+)
 
-# Install "torch" for Mac M1
-# source("https://raw.githubusercontent.com/mlverse/torch/master/R/install.R")
-install.packages("torch")
+install.packages(pkgs)
 
 # 2. Install other necessary packages ----
-
-if (!requireNamespace("mclust", quietly = TRUE)) install.packages("mclust")
-
-if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
 
 BiocManager::install("SingleCellExperiment")
 
 #libtorch can be installed using:
-# torch::install_torch(reinstall = TRUE)
+install.packages("torch")
+torch::install_torch(reinstall = TRUE)
 
-# Sys.setenv(TORCH_INSTALL = 1)
