@@ -74,29 +74,37 @@ All required packages and dependencies to install are put in file *install_packa
 
 We just need to install the packages as followings:
 
-`# 1. Install "scDHA" from CRAN:`
+`# 1. Install "scDHA" and other packages from CRAN:`
 
-`install.packages("scDHA")`
-
-`install.packages("MASS")`
+`pkgs <- c(` <br>
+    `"scDHA",`     
+    `"MASS",` <br>    
+    `"torch",` <br>
+    `"mclust",`<br>    
+    `"BiocManager",`
+<br>    
+    `"flexdashboard",` <br>
+    `"shiny",` <br>
+    `"shinyWidgets",` <br>
+    `"shinyjs",` <br>
+<br>    
+    `# install.packages("DT")` <br>
+    `"DT",`
+<br>    
+    `# Core` <br>
+    `"tidyverse"` <br>
+`)`
 
 <br>
 
-`# Install "torch" for Mac M1`
+`install.packages(pkgs)`
 
-`# source("https://raw.githubusercontent.com/mlverse/torch/master/R/install.R")`
-
-`install.packages("torch")`
-
-<br>
-
-`# 2. Install other necessary packages ----`
-
-`if (!requireNamespace("mclust", quietly = TRUE)) install.packages("mclust")`
-
-`if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")`
+# 2. Install other necessary packages
 
 `BiocManager::install("SingleCellExperiment")`
+
+`#libtorch can be installed using:`
+`# torch::install_torch(reinstall = TRUE)`
 
 
 <br>
